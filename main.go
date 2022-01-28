@@ -87,6 +87,46 @@ var writeCmd = &cobra.Command{
 	},
 }
 
+var readCmd = &cobra.Command{
+	Use: "read <winid> <winfile>",
+	Short: 	"read cats the entire contents of the given winfile",
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.Atoi(args[0])
+		if err != nil {
+			return fmt.Errorf("parse winid: %w", err)
+		}
+		win, err := acme.Open(id, nil)
+		if err != nil {
+			return fmt.Errorf("open window: %w", err)
+		}
+		bs, err := win.ReadAll(args[1])
+		if err != nil {
+			return fmt.Errorf("read file: %w", err)
+		}
+		_, err = os.Stdout.Write(bs)
+		if err != nil {
+			return fmt.Errorf("write to stdout: %w", err)
+		}
+		return nil
+	},
+}
+
+var lsCmd = &cobra.Command{
+	Use: "ls <winid>",
+	Short: 	"ls lists the available window files",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Println(`addr
+body
+ctl
+data
+event
+tag
+xdata`)
+		return nil
+	},
+}
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Println(err)
@@ -95,6 +135,6 @@ func main() {
 }
 
 func run() error {
-	rootCmd.AddCommand(newCmd, ctlCmd, writeCmd)
+	rootCmd.AddCommand(newCmd, ctlCmd, writeCmd, readCmd, lsCmd)
 	return rootCmd.Execute()
 }
