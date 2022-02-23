@@ -129,8 +129,8 @@ xdata`)
 }
 
 var onCmd = &cobra.Command{
-	Use:   "onexec <winid> <event> <command...>",
-	Short: "Intercepts matching execute events from  the given windows event channel. When found, runs the command. Exits when the window is closed.",
+	Use:   "onexec <winid> <event> <script>",
+	Short: "Intercepts matching execute events from  the given windows event channel. When found, runs the command in bash. Exits when the window is closed.",
 	Args:  cobra.MinimumNArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := strconv.Atoi(args[0])
@@ -138,27 +138,33 @@ var onCmd = &cobra.Command{
 			return fmt.Errorf("parse winid: %w", err)
 		}
 		ev := args[1]
-		cmdName := args[2]
-		cargs := args[3:]
+		script := strings.Join(args[2:], " ")
 
 		win, err := acme.Open(id, nil)
 		if err != nil {
 			return fmt.Errorf("open window: %w", err)
 		}
 
+		executor := make(chan struct{}, 60) // when we find a matching signal we trigger an execution of the script
+		defer close(executor)
+		go func() {
+			for range executor {
+				exe := exec.Command("bash", "-c", script)
+				exe.Stdout = os.Stdout
+				exe.Stderr = os.Stderr
+				err := exe.Run()
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+			}
+		}()
+
 		for e := range win.EventChan() {
 			switch e.C2 {
 			case 'x', 'X': // execute
 				if string(e.Text) == ev {
-					exe := exec.Command(cmdName, cargs...)
-					exe.Stdout = os.Stdout
-					exe.Stderr = os.Stderr
-					err := exe.Run()
-					if err != nil {
-						fmt.Println(err)
-						continue
-					}
-					continue
+					executor <- struct{}{}
 				}
 			}
 			win.WriteEvent(e)
